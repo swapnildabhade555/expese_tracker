@@ -1,14 +1,14 @@
 import prisma from './db.js';
 
 const defaultCategories = [
-  'Food & Dining',
-  'Shopping',
-  'Utilities & Bills',
-  'Transportation',
-  'Entertainment',
-  'Health & Fitness',
-  'Travel',
-  'Others',
+  { name: 'Food & Dining', icon: '🍔' },
+  { name: 'Shopping', icon: '🛍️' },
+  { name: 'Utilities & Bills', icon: '💡' },
+  { name: 'Transportation', icon: '🚗' },
+  { name: 'Entertainment', icon: '🎬' },
+  { name: 'Health & Fitness', icon: '💪' },
+  { name: 'Travel', icon: '✈️' },
+  { name: 'Others', icon: '📦' },
 ];
 
 export const seedDefaultCategories = async () => {
@@ -23,8 +23,9 @@ export const seedDefaultCategories = async () => {
     if (existingCount === 0) {
       console.log('No default categories found. Seeding default categories...');
       
-      const seedData = defaultCategories.map((name) => ({
+      const seedData = defaultCategories.map(({ name, icon }) => ({
         name,
+        icon,
         isDefault: true,
         userId: null,
       }));

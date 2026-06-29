@@ -26,6 +26,7 @@ model User {
 model Category {
   id        String    @id @default(uuid())
   name      String
+  icon      String    @default("📁") // Emoji or short icon identifier
   isDefault Boolean   @default(false)
   userId    String?
   user      User?     @relation(fields: [userId], references: [id], onDelete: Cascade)
