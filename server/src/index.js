@@ -8,6 +8,7 @@ import { seedDefaultCategories } from './config/seed.js';
 import authRouter from './modules/auth/authRoutes.js';
 import categoryRouter from './modules/categories/categoryRoutes.js';
 import expenseRouter from './modules/expenses/expenseRoutes.js';
+import analyticsRouter from './modules/analytics/analyticsRoutes.js';
 
 dotenv.config();
 
@@ -26,6 +27,7 @@ app.use(express.json());
 app.use('/api/auth', authRouter);
 app.use('/api/categories', categoryRouter);
 app.use('/api/expenses', expenseRouter);
+app.use('/api/analytics', analyticsRouter);
 
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', message: 'Expense Tracker API is running' });
