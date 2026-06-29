@@ -3,9 +3,11 @@ import cors from 'cors';
 import dotenv from 'dotenv';
 import { errorHandler } from './middlewares/errorHandler.js';
 import AppError from './utils/AppError.js';
+import { seedDefaultCategories } from './config/seed.js';
 
 import authRouter from './modules/auth/authRoutes.js';
 import categoryRouter from './modules/categories/categoryRoutes.js';
+import expenseRouter from './modules/expenses/expenseRoutes.js';
 
 dotenv.config();
 
@@ -23,6 +25,7 @@ app.use(express.json());
 // Routes
 app.use('/api/auth', authRouter);
 app.use('/api/categories', categoryRouter);
+app.use('/api/expenses', expenseRouter);
 
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', message: 'Expense Tracker API is running' });
@@ -35,8 +38,6 @@ app.all('*', (req, res, next) => {
 
 // Global Error Handler Middleware
 app.use(errorHandler);
-
-import { seedDefaultCategories } from './config/seed.js';
 
 app.listen(PORT, async () => {
   console.log(`Server is running in ${process.env.NODE_ENV} mode on port ${PORT}`);
