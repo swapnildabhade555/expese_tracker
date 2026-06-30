@@ -1,6 +1,7 @@
 import prisma from '../../config/db.js';
 import AppError from '../../utils/AppError.js';
 import catchAsync from '../../utils/catchAsync.js';
+import { processRecurringExpenses } from './recurringExpenseService.js';
 
 /**
  * @desc    Record a new expense
@@ -61,6 +62,9 @@ export const createExpense = catchAsync(async (req, res, next) => {
  */
 export const getExpenses = catchAsync(async (req, res, next) => {
   const userId = req.user.id;
+
+  // Process any due recurring expenses before querying
+  await processRecurringExpenses(userId);
   const {
     categoryId,
     startDate,
@@ -299,6 +303,9 @@ export const deleteExpense = catchAsync(async (req, res, next) => {
 export const getExpenseSummary = catchAsync(async (req, res, next) => {
   const userId = req.user.id;
 
+  // Process any due recurring expenses before querying
+  await processRecurringExpenses(userId);
+
   // 1. Get total sum of personal expenses
   const totalAggregate = await prisma.expense.aggregate({
     where: {
@@ -370,5 +377,254 @@ export const getExpenseSummary = catchAsync(async (req, res, next) => {
         breakdown,
       },
     },
+  });
+});
+
+/**
+ * @desc    Create a recurring expense template
+ * @route   POST /api/expenses/recurring
+ * @access  Private
+ */
+export const createRecurringExpense = catchAsync(async (req, res, next) => {
+  const { description, amount, startDate, interval, categoryId } = req.body;
+  const userId = req.user.id;
+
+  // 1. Verify category exists and belongs to user (or is default)
+  const category = await prisma.category.findFirst({
+    where: {
+      id: categoryId,
+      OR: [
+        { isDefault: true },
+        { userId: userId },
+      ],
+    },
+  });
+
+  if (!category) {
+    return next(new AppError('Category not found or access denied.', 404));
+  }
+
+  // 2. Create the recurring expense
+  const start = startDate ? new Date(startDate) : new Date();
+  const newRecurringExpense = await prisma.recurringExpense.create({
+    data: {
+      description,
+      amount,
+      startDate: start,
+      nextDueDate: start,
+      interval,
+      categoryId,
+      paidById: userId,
+    },
+    include: {
+      category: {
+        select: {
+          id: true,
+          name: true,
+          icon: true,
+        },
+      },
+    },
+  });
+
+  // 3. Immediately trigger engine to backfill any occurrences due
+  await processRecurringExpenses(userId);
+
+  res.status(201).json({
+    status: 'success',
+    data: {
+      recurringExpense: newRecurringExpense,
+    },
+  });
+});
+
+/**
+ * @desc    Get all user's recurring expense templates
+ * @route   GET /api/expenses/recurring
+ * @access  Private
+ */
+export const getRecurringExpenses = catchAsync(async (req, res, next) => {
+  const userId = req.user.id;
+
+  const recurringExpenses = await prisma.recurringExpense.findMany({
+    where: {
+      paidById: userId,
+    },
+    orderBy: {
+      createdAt: 'desc',
+    },
+    include: {
+      category: {
+        select: {
+          id: true,
+          name: true,
+          icon: true,
+        },
+      },
+    },
+  });
+
+  res.status(200).json({
+    status: 'success',
+    results: recurringExpenses.length,
+    data: {
+      recurringExpenses,
+    },
+  });
+});
+
+/**
+ * @desc    Get details of a single recurring expense
+ * @route   GET /api/expenses/recurring/:id
+ * @access  Private
+ */
+export const getRecurringExpense = catchAsync(async (req, res, next) => {
+  const { id } = req.params;
+  const userId = req.user.id;
+
+  const recurringExpense = await prisma.recurringExpense.findUnique({
+    where: { id },
+    include: {
+      category: {
+        select: {
+          id: true,
+          name: true,
+          icon: true,
+        },
+      },
+    },
+  });
+
+  if (!recurringExpense) {
+    return next(new AppError('Recurring expense not found.', 404));
+  }
+
+  if (recurringExpense.paidById !== userId) {
+    return next(new AppError('You do not have permission to view this recurring expense.', 403));
+  }
+
+  res.status(200).json({
+    status: 'success',
+    data: {
+      recurringExpense,
+    },
+  });
+});
+
+/**
+ * @desc    Update a recurring expense
+ * @route   PATCH /api/expenses/recurring/:id
+ * @access  Private
+ */
+export const updateRecurringExpense = catchAsync(async (req, res, next) => {
+  const { id } = req.params;
+  const { description, amount, startDate, interval, categoryId, isActive } = req.body;
+  const userId = req.user.id;
+
+  // 1. Fetch template & check ownership
+  const recExpense = await prisma.recurringExpense.findUnique({
+    where: { id },
+  });
+
+  if (!recExpense) {
+    return next(new AppError('Recurring expense not found.', 404));
+  }
+
+  if (recExpense.paidById !== userId) {
+    return next(new AppError('You do not have permission to edit this recurring expense.', 403));
+  }
+
+  // 2. Validate category if updated
+  if (categoryId && categoryId !== recExpense.categoryId) {
+    const category = await prisma.category.findFirst({
+      where: {
+        id: categoryId,
+        OR: [
+          { isDefault: true },
+          { userId: userId },
+        ],
+      },
+    });
+
+    if (!category) {
+      return next(new AppError('Category not found or access denied.', 404));
+    }
+  }
+
+  // 3. Prepare updates
+  const updateData = {
+    description,
+    amount,
+    isActive,
+    categoryId,
+  };
+
+  if (startDate) {
+    const newStart = new Date(startDate);
+    updateData.startDate = newStart;
+    updateData.nextDueDate = newStart;
+  }
+  
+  if (interval && interval !== recExpense.interval) {
+    updateData.interval = interval;
+    const baseDate = startDate ? new Date(startDate) : new Date(recExpense.startDate);
+    updateData.nextDueDate = baseDate;
+  }
+
+  const updatedRecurringExpense = await prisma.recurringExpense.update({
+    where: { id },
+    data: updateData,
+    include: {
+      category: {
+        select: {
+          id: true,
+          name: true,
+          icon: true,
+        },
+      },
+    },
+  });
+
+  // If set to active, run processor immediately to see if any instances are due
+  if (isActive !== false) {
+    await processRecurringExpenses(userId);
+  }
+
+  res.status(200).json({
+    status: 'success',
+    data: {
+      recurringExpense: updatedRecurringExpense,
+    },
+  });
+});
+
+/**
+ * @desc    Delete a recurring expense template
+ * @route   DELETE /api/expenses/recurring/:id
+ * @access  Private
+ */
+export const deleteRecurringExpense = catchAsync(async (req, res, next) => {
+  const { id } = req.params;
+  const userId = req.user.id;
+
+  const recExpense = await prisma.recurringExpense.findUnique({
+    where: { id },
+  });
+
+  if (!recExpense) {
+    return next(new AppError('Recurring expense not found.', 404));
+  }
+
+  if (recExpense.paidById !== userId) {
+    return next(new AppError('You do not have permission to delete this recurring expense.', 403));
+  }
+
+  await prisma.recurringExpense.delete({
+    where: { id },
+  });
+
+  res.status(204).json({
+    status: 'success',
+    data: null,
   });
 });

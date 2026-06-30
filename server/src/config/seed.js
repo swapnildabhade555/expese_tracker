@@ -8,6 +8,11 @@ const defaultCategories = [
   { name: 'Entertainment', icon: '🎬' },
   { name: 'Health & Fitness', icon: '💪' },
   { name: 'Travel', icon: '✈️' },
+  { name: 'Rent', icon: '🏠' },
+  { name: 'EMI', icon: '💳' },
+  { name: 'Maintenance', icon: '🔧' },
+  { name: 'Subscription', icon: '📱' },
+  { name: 'Insurance', icon: '🛡️' },
   { name: 'Others', icon: '📦' },
 ];
 
@@ -15,28 +20,33 @@ export const seedDefaultCategories = async () => {
   try {
     console.log('Checking database default categories...');
     
-    // Find how many default categories are already in database
-    const existingCount = await prisma.category.count({
-      where: { isDefault: true },
-    });
-
-    if (existingCount === 0) {
-      console.log('No default categories found. Seeding default categories...');
-      
-      const seedData = defaultCategories.map(({ name, icon }) => ({
-        name,
-        icon,
-        isDefault: true,
-        userId: null,
-      }));
-
-      await prisma.category.createMany({
-        data: seedData,
+    let seededCount = 0;
+    for (const cat of defaultCategories) {
+      const existing = await prisma.category.findFirst({
+        where: {
+          name: cat.name,
+          isDefault: true,
+          userId: null,
+        },
       });
 
-      console.log(`✅ Successfully seeded ${defaultCategories.length} default categories.`);
+      if (!existing) {
+        await prisma.category.create({
+          data: {
+            name: cat.name,
+            icon: cat.icon,
+            isDefault: true,
+            userId: null,
+          },
+        });
+        seededCount++;
+      }
+    }
+
+    if (seededCount > 0) {
+      console.log(`✅ Successfully seeded ${seededCount} new default categories.`);
     } else {
-      console.log('Default categories already exist. Skipping seed.');
+      console.log('All default categories are already seeded.');
     }
   } catch (error) {
     console.error('❌ Failed to seed default categories:', error);

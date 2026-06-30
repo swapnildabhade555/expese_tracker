@@ -9,6 +9,7 @@ import authRouter from './modules/auth/authRoutes.js';
 import categoryRouter from './modules/categories/categoryRoutes.js';
 import expenseRouter from './modules/expenses/expenseRoutes.js';
 import analyticsRouter from './modules/analytics/analyticsRoutes.js';
+import { processRecurringExpenses } from './modules/expenses/recurringExpenseService.js';
 
 dotenv.config();
 
@@ -45,4 +46,14 @@ app.listen(PORT, async () => {
   console.log(`Server is running in ${process.env.NODE_ENV} mode on port ${PORT}`);
   // Seed default categories
   await seedDefaultCategories();
+  
+  // Process any due recurring expenses on startup
+  console.log('Processing recurring expenses on startup...');
+  await processRecurringExpenses();
+
+  // Set up hourly background check
+  setInterval(async () => {
+    console.log('Running background scan for due recurring expenses...');
+    await processRecurringExpenses();
+  }, 3600000);
 });

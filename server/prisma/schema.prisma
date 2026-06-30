@@ -10,29 +10,31 @@ generator client {
 }
 
 model User {
-  id             String          @id @default(uuid())
-  email          String          @unique
-  password       String          // Hashed password
-  name           String
-  createdAt      DateTime        @default(now())
-  updatedAt      DateTime        @updatedAt
-  categories     Category[]
-  expensesPaid   Expense[]       @relation("PaidExpenses")
-  splits         ExpenseSplit[]
-  memberships    GroupMember[]
-  groupsCreated  Group[]         @relation("GroupCreator")
+  id                 String             @id @default(uuid())
+  email              String             @unique
+  password           String             // Hashed password
+  name               String
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
+  categories         Category[]
+  expensesPaid       Expense[]          @relation("PaidExpenses")
+  recurringExpenses  RecurringExpense[] @relation("PaidRecurringExpenses")
+  splits             ExpenseSplit[]
+  memberships        GroupMember[]
+  groupsCreated      Group[]            @relation("GroupCreator")
 }
 
 model Category {
-  id        String    @id @default(uuid())
-  name      String
-  icon      String    @default("📁") // Emoji or short icon identifier
-  isDefault Boolean   @default(false)
-  userId    String?
-  user      User?     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  expenses  Expense[]
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
+  id                String             @id @default(uuid())
+  name              String
+  icon              String             @default("📁") // Emoji or short icon identifier
+  isDefault         Boolean            @default(false)
+  userId            String?
+  user              User?              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expenses          Expense[]
+  recurringExpenses RecurringExpense[]
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
 
   @@unique([name, userId])
 }
@@ -61,20 +63,22 @@ model GroupMember {
 }
 
 model Expense {
-  id           String         @id @default(uuid())
-  description  String
-  amount       Decimal        // Stores precise financial values
-  date         DateTime       @default(now())
-  categoryId   String
-  category     Category       @relation(fields: [categoryId], references: [id])
-  paidById     String         // The user who paid the bill
-  paidBy       User           @relation("PaidExpenses", fields: [paidById], references: [id])
-  groupId      String?        // Nullable (null if it is a personal/individual expense)
-  group        Group?         @relation(fields: [groupId], references: [id], onDelete: SetNull)
-  subgroupName String?        // Specific subgroup tag/name within the group
-  splits       ExpenseSplit[]
-  createdAt    DateTime       @default(now())
-  updatedAt    DateTime       @updatedAt
+  id                 String            @id @default(uuid())
+  description        String
+  amount             Decimal           // Stores precise financial values
+  date               DateTime          @default(now())
+  categoryId         String
+  category           Category          @relation(fields: [categoryId], references: [id])
+  paidById           String            // The user who paid the bill
+  paidBy             User              @relation("PaidExpenses", fields: [paidById], references: [id])
+  groupId            String?           // Nullable (null if it is a personal/individual expense)
+  group              Group?            @relation(fields: [groupId], references: [id], onDelete: SetNull)
+  subgroupName       String?           // Specific subgroup tag/name within the group
+  recurringExpenseId String?
+  recurringExpense   RecurringExpense? @relation("GeneratedExpenses", fields: [recurringExpenseId], references: [id], onDelete: SetNull)
+  splits             ExpenseSplit[]
+  createdAt          DateTime          @default(now())
+  updatedAt          DateTime          @updatedAt
 }
 
 model ExpenseSplit {
@@ -88,4 +92,28 @@ model ExpenseSplit {
   updatedAt  DateTime @updatedAt
 
   @@unique([expenseId, userId])
+}
+
+enum RecurrenceInterval {
+  DAILY
+  WEEKLY
+  MONTHLY
+  YEARLY
+}
+
+model RecurringExpense {
+  id          String             @id @default(uuid())
+  description String
+  amount      Decimal            // Stores precise financial values
+  startDate   DateTime           @default(now())
+  nextDueDate DateTime           @default(now())
+  interval    RecurrenceInterval
+  categoryId  String
+  category    Category           @relation(fields: [categoryId], references: [id])
+  paidById    String             // The user who set it up
+  paidBy      User               @relation("PaidRecurringExpenses", fields: [paidById], references: [id])
+  isActive    Boolean            @default(true)
+  expenses    Expense[]          @relation("GeneratedExpenses")
+  createdAt   DateTime           @default(now())
+  updatedAt   DateTime           @updatedAt
 }
