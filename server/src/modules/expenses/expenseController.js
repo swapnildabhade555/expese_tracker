@@ -2,6 +2,7 @@ import prisma from '../../config/db.js';
 import AppError from '../../utils/AppError.js';
 import catchAsync from '../../utils/catchAsync.js';
 import { processRecurringExpenses, advanceDate } from './recurringExpenseService.js';
+import { convertAmount } from './currencyService.js';
 
 /**
  * @desc    Record a new expense
@@ -9,8 +10,9 @@ import { processRecurringExpenses, advanceDate } from './recurringExpenseService
  * @access  Private
  */
 export const createExpense = catchAsync(async (req, res, next) => {
-  const { description, amount, date, categoryId } = req.body;
+  const { description, amount, date, categoryId, currency } = req.body;
   const userId = req.user.id;
+  const homeCurrency = req.user.currency;
 
   // 1. Verify category exists and belongs to user (or is default)
   const category = await prisma.category.findFirst({
@@ -32,6 +34,7 @@ export const createExpense = catchAsync(async (req, res, next) => {
     data: {
       description,
       amount,
+      currency: currency || homeCurrency,
       date: date ? new Date(date) : new Date(),
       categoryId,
       paidById: userId,
@@ -62,6 +65,7 @@ export const createExpense = catchAsync(async (req, res, next) => {
  */
 export const getExpenses = catchAsync(async (req, res, next) => {
   const userId = req.user.id;
+  const homeCurrency = req.user.currency;
 
   // Process any due recurring expenses before querying
   await processRecurringExpenses(userId);
@@ -75,7 +79,10 @@ export const getExpenses = catchAsync(async (req, res, next) => {
     page,
     limit,
     sortBy,
+    targetCurrency,
   } = req.query;
+
+  const displayCurrency = targetCurrency || homeCurrency;
 
   // 1. Build dynamic where filter
   const where = {
@@ -148,9 +155,14 @@ export const getExpenses = catchAsync(async (req, res, next) => {
       page: pageNum,
       limit: limitNum,
       totalPages: Math.ceil(totalCount / limitNum),
+      targetCurrency: displayCurrency,
     },
     data: {
-      expenses,
+      expenses: expenses.map((exp) => ({
+        ...exp,
+        amount: Number(exp.amount),
+        convertedAmount: convertAmount(exp.amount, exp.currency, displayCurrency),
+      })),
     },
   });
 });
@@ -302,43 +314,39 @@ export const deleteExpense = catchAsync(async (req, res, next) => {
  */
 export const getExpenseSummary = catchAsync(async (req, res, next) => {
   const userId = req.user.id;
+  const homeCurrency = req.user.currency;
+  const { targetCurrency } = req.query;
+  const displayCurrency = targetCurrency || homeCurrency;
 
   // Process any due recurring expenses before querying
   await processRecurringExpenses(userId);
 
-  // 1. Get total sum of personal expenses
-  const totalAggregate = await prisma.expense.aggregate({
+  // Fetch all personal expenses
+  const expenses = await prisma.expense.findMany({
     where: {
       paidById: userId,
       groupId: null,
     },
-    _sum: {
-      amount: true,
-    },
-    _count: {
-      id: true,
-    },
   });
 
-  const totalAmount = totalAggregate._sum.amount || 0;
-  const totalCount = totalAggregate._count.id || 0;
+  let totalAmount = 0;
+  const totalCount = expenses.length;
+  
+  // Group and sum in memory
+  const categorySums = {}; // categoryId -> { amount: 0, count: 0 }
 
-  // 2. Group personal expenses by category to aggregate amounts
-  const categoryBreakdown = await prisma.expense.groupBy({
-    by: ['categoryId'],
-    where: {
-      paidById: userId,
-      groupId: null,
-    },
-    _sum: {
-      amount: true,
-    },
-    _count: {
-      id: true,
-    },
+  expenses.forEach((exp) => {
+    const converted = convertAmount(exp.amount, exp.currency, displayCurrency);
+    totalAmount += converted;
+
+    if (!categorySums[exp.categoryId]) {
+      categorySums[exp.categoryId] = { amount: 0, count: 0 };
+    }
+    categorySums[exp.categoryId].amount += converted;
+    categorySums[exp.categoryId].count += 1;
   });
 
-  // 3. Fetch all active categories to map names and icons
+  // Fetch categories to map names and icons
   const categories = await prisma.category.findMany({
     where: {
       OR: [
@@ -352,28 +360,28 @@ export const getExpenseSummary = catchAsync(async (req, res, next) => {
     categories.map((c) => [c.id, { name: c.name, icon: c.icon }])
   );
 
-  // 4. Map and calculate breakdown details
-  const breakdown = categoryBreakdown.map((item) => {
-    const details = categoryMap.get(item.categoryId) || { name: 'Unknown Category', icon: '📁' };
-    const categoryAmount = item._sum.amount || 0;
-    const percentage = totalAmount > 0 ? ((Number(categoryAmount) / Number(totalAmount)) * 100).toFixed(2) : '0.00';
+  // Map to the breakdown array
+  const breakdown = Object.entries(categorySums).map(([catId, data]) => {
+    const details = categoryMap.get(catId) || { name: 'Unknown Category', icon: '📁' };
+    const percentage = totalAmount > 0 ? ((data.amount / totalAmount) * 100).toFixed(2) : '0.00';
 
     return {
-      categoryId: item.categoryId,
+      categoryId: catId,
       categoryName: details.name,
       categoryIcon: details.icon,
-      totalAmount: categoryAmount,
-      count: item._count.id,
+      totalAmount: parseFloat(data.amount.toFixed(2)),
+      count: data.count,
       percentage: parseFloat(percentage),
     };
-  }).sort((a, b) => Number(b.totalAmount) - Number(a.totalAmount));
+  }).sort((a, b) => b.totalAmount - a.totalAmount);
 
   res.status(200).json({
     status: 'success',
     data: {
       summary: {
-        totalAmount,
+        totalAmount: parseFloat(totalAmount.toFixed(2)),
         totalCount,
+        currency: displayCurrency,
         breakdown,
       },
     },
@@ -386,8 +394,9 @@ export const getExpenseSummary = catchAsync(async (req, res, next) => {
  * @access  Private
  */
 export const createRecurringExpense = catchAsync(async (req, res, next) => {
-  const { description, amount, startDate, interval, categoryId } = req.body;
+  const { description, amount, currency, startDate, interval, categoryId } = req.body;
   const userId = req.user.id;
+  const homeCurrency = req.user.currency;
 
   // 1. Verify category exists and belongs to user (or is default)
   const category = await prisma.category.findFirst({
@@ -410,6 +419,7 @@ export const createRecurringExpense = catchAsync(async (req, res, next) => {
     data: {
       description,
       amount,
+      currency: currency || homeCurrency,
       startDate: start,
       nextDueDate: start,
       interval,
@@ -555,6 +565,7 @@ export const updateRecurringExpense = catchAsync(async (req, res, next) => {
   const updateData = {
     description,
     amount,
+    currency,
     isActive,
     categoryId,
   };

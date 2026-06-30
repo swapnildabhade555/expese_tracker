@@ -67,6 +67,7 @@ export const processRecurringExpenses = async (userId = null) => {
         expensesToCreate.push({
           description: recExpense.description,
           amount: recExpense.amount,
+          currency: recExpense.currency,
           date: new Date(currentDueDate),
           categoryId: recExpense.categoryId,
           paidById: recExpense.paidById,

@@ -14,11 +14,13 @@ model User {
   email              String             @unique
   password           String             // Hashed password
   name               String
+  currency           Currency           @default(INR)
   createdAt          DateTime           @default(now())
   updatedAt          DateTime           @updatedAt
   categories         Category[]
   expensesPaid       Expense[]          @relation("PaidExpenses")
   recurringExpenses  RecurringExpense[] @relation("PaidRecurringExpenses")
+  refreshTokens      RefreshToken[]
   splits             ExpenseSplit[]
   memberships        GroupMember[]
   groupsCreated      Group[]            @relation("GroupCreator")
@@ -66,6 +68,7 @@ model Expense {
   id                 String            @id @default(uuid())
   description        String
   amount             Decimal           // Stores precise financial values
+  currency           Currency          @default(INR)
   date               DateTime          @default(now())
   categoryId         String
   category           Category          @relation(fields: [categoryId], references: [id])
@@ -105,6 +108,7 @@ model RecurringExpense {
   id          String             @id @default(uuid())
   description String
   amount      Decimal            // Stores precise financial values
+  currency    Currency           @default(INR)
   startDate   DateTime           @default(now())
   nextDueDate DateTime           @default(now())
   interval    RecurrenceInterval
@@ -116,4 +120,20 @@ model RecurringExpense {
   expenses    Expense[]          @relation("GeneratedExpenses")
   createdAt   DateTime           @default(now())
   updatedAt   DateTime           @updatedAt
+}
+
+model RefreshToken {
+  id        String   @id @default(uuid())
+  token     String   @unique
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+}
+
+enum Currency {
+  INR
+  USD
+  EUR
+  AUD
 }

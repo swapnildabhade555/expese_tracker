@@ -23,11 +23,20 @@ export const getCategories = catchAsync(async (req, res, next) => {
     ],
   });
 
+  // Sanitize default categories: omit userId as it is null and redundant
+  const sanitizedCategories = categories.map((cat) => {
+    if (cat.isDefault) {
+      const { userId, ...rest } = cat;
+      return rest;
+    }
+    return cat;
+  });
+
   res.status(200).json({
     status: 'success',
-    results: categories.length,
+    results: sanitizedCategories.length,
     data: {
-      categories,
+      categories: sanitizedCategories,
     },
   });
 });

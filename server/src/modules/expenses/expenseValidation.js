@@ -13,6 +13,7 @@ export const createExpenseSchema = z.object({
       invalid_type_error: 'Amount must be a number',
     })
     .positive('Amount must be a positive number'),
+    currency: z.enum(['INR', 'USD', 'EUR', 'AUD']).optional(),
     date: z.coerce.date().optional(),
     categoryId: z.string({
       required_error: 'Category ID is required',
@@ -34,6 +35,7 @@ export const updateExpenseSchema = z.object({
     amount: z.coerce.number({ invalid_type_error: 'Amount must be a number' })
       .positive('Amount must be a positive number')
       .optional(),
+    currency: z.enum(['INR', 'USD', 'EUR', 'AUD']).optional(),
     date: z.coerce.date().optional(),
     categoryId: z.string().uuid('Invalid category ID').optional(),
   }).refine((data) => Object.keys(data).length > 0, {
@@ -52,6 +54,7 @@ export const getExpensesQuerySchema = z.object({
     page: z.coerce.number().int().positive().optional().default(1),
     limit: z.coerce.number().int().positive().optional().default(10),
     sortBy: z.string().optional().default('date:desc'),
+    targetCurrency: z.enum(['INR', 'USD', 'EUR', 'AUD']).optional(),
   }),
 });
 
@@ -68,6 +71,7 @@ export const createRecurringExpenseSchema = z.object({
       invalid_type_error: 'Amount must be a number',
     })
     .positive('Amount must be a positive number'),
+    currency: z.enum(['INR', 'USD', 'EUR', 'AUD']).optional(),
     startDate: z.coerce.date().optional(),
     interval: z.enum(['DAILY', 'WEEKLY', 'MONTHLY', 'YEARLY'], {
       required_error: 'Interval is required',
@@ -93,6 +97,7 @@ export const updateRecurringExpenseSchema = z.object({
     amount: z.coerce.number({ invalid_type_error: 'Amount must be a number' })
       .positive('Amount must be a positive number')
       .optional(),
+    currency: z.enum(['INR', 'USD', 'EUR', 'AUD']).optional(),
     startDate: z.coerce.date().optional(),
     interval: z.enum(['DAILY', 'WEEKLY', 'MONTHLY', 'YEARLY']).optional(),
     categoryId: z.string().uuid('Invalid category ID').optional(),

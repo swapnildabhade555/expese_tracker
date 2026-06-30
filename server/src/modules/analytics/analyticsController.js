@@ -1,6 +1,7 @@
 import prisma from '../../config/db.js';
 import AppError from '../../utils/AppError.js';
 import catchAsync from '../../utils/catchAsync.js';
+import { convertAmount } from '../expenses/currencyService.js';
 
 /**
  * Helper function to calculate start-of-week (Monday) or date-interval keys in JS
@@ -41,7 +42,9 @@ function getIntervalKey(date, interval) {
  */
 export const getCategoryBreakdown = catchAsync(async (req, res, next) => {
   const userId = req.user.id;
-  const { startDate, endDate } = req.query;
+  const homeCurrency = req.user.currency;
+  const { startDate, endDate, targetCurrency } = req.query;
+  const displayCurrency = targetCurrency || homeCurrency;
 
   // Build filters
   const where = {
@@ -55,36 +58,27 @@ export const getCategoryBreakdown = catchAsync(async (req, res, next) => {
     if (endDate) where.date.lte = new Date(endDate);
   }
 
-  // 1. Get total spending across personal expenses
-  const totalAggregate = await prisma.expense.aggregate({
-    where,
-    _sum: {
-      amount: true,
-    },
-    _count: {
-      id: true,
-    },
+  // Fetch all matching personal expenses
+  const expenses = await prisma.expense.findMany({ where });
+
+  let totalAmount = 0;
+  const totalCount = expenses.length;
+
+  // Group and sum in memory
+  const categorySums = {}; // categoryId -> { amount: 0, count: 0 }
+
+  expenses.forEach((exp) => {
+    const converted = convertAmount(exp.amount, exp.currency, displayCurrency);
+    totalAmount += converted;
+
+    if (!categorySums[exp.categoryId]) {
+      categorySums[exp.categoryId] = { amount: 0, count: 0 };
+    }
+    categorySums[exp.categoryId].amount += converted;
+    categorySums[exp.categoryId].count += 1;
   });
 
-  const totalAmount = totalAggregate._sum.amount || 0;
-  const totalCount = totalAggregate._count.id || 0;
-
-  // 2. Group expenses by category
-  const categoryBreakdown = await prisma.expense.groupBy({
-    by: ['categoryId'],
-    where,
-    _sum: {
-      amount: true,
-    },
-    _count: {
-      id: true,
-    },
-    _avg: {
-      amount: true,
-    },
-  });
-
-  // 3. Fetch active categories for mapping
+  // Fetch active categories for mapping
   const categories = await prisma.category.findMany({
     where: {
       OR: [
@@ -98,21 +92,17 @@ export const getCategoryBreakdown = catchAsync(async (req, res, next) => {
     categories.map((c) => [c.id, { name: c.name, icon: c.icon }])
   );
 
-  // 4. Map results with percentages and sorted order
-  const breakdown = categoryBreakdown.map((item) => {
-    const details = categoryMap.get(item.categoryId) || { name: 'Unknown Category', icon: '📁' };
-    const categoryAmount = item._sum.amount || 0;
-    const categoryCount = item._count.id || 0;
-    const categoryAvg = item._avg.amount || 0;
-    const percentage = totalAmount > 0 ? ((Number(categoryAmount) / Number(totalAmount)) * 100).toFixed(2) : '0.00';
+  const breakdown = Object.entries(categorySums).map(([catId, data]) => {
+    const details = categoryMap.get(catId) || { name: 'Unknown Category', icon: '📁' };
+    const percentage = totalAmount > 0 ? ((data.amount / totalAmount) * 100).toFixed(2) : '0.00';
 
     return {
-      categoryId: item.categoryId,
+      categoryId: catId,
       categoryName: details.name,
       categoryIcon: details.icon,
-      totalAmount: Number(categoryAmount),
-      count: categoryCount,
-      averageAmount: Number(categoryAvg),
+      totalAmount: parseFloat(data.amount.toFixed(2)),
+      count: data.count,
+      averageAmount: parseFloat((data.amount / data.count).toFixed(2)),
       percentage: parseFloat(percentage),
     };
   }).sort((a, b) => b.totalAmount - a.totalAmount);
@@ -120,8 +110,9 @@ export const getCategoryBreakdown = catchAsync(async (req, res, next) => {
   res.status(200).json({
     status: 'success',
     data: {
-      totalAmount: Number(totalAmount),
+      totalAmount: parseFloat(totalAmount.toFixed(2)),
       totalCount,
+      currency: displayCurrency,
       breakdown,
     },
   });
@@ -134,7 +125,9 @@ export const getCategoryBreakdown = catchAsync(async (req, res, next) => {
  */
 export const getCategoryTrends = catchAsync(async (req, res, next) => {
   const userId = req.user.id;
-  const { startDate, endDate, interval } = req.query;
+  const homeCurrency = req.user.currency;
+  const { startDate, endDate, interval, targetCurrency } = req.query;
+  const displayCurrency = targetCurrency || homeCurrency;
 
   // Build filters
   const where = {
@@ -153,6 +146,7 @@ export const getCategoryTrends = catchAsync(async (req, res, next) => {
     where,
     select: {
       amount: true,
+      currency: true,
       date: true,
       category: {
         select: {
@@ -172,7 +166,7 @@ export const getCategoryTrends = catchAsync(async (req, res, next) => {
   expenses.forEach((expense) => {
     const key = getIntervalKey(expense.date, interval);
     const categoryName = expense.category?.name || 'Unknown Category';
-    const amount = Number(expense.amount);
+    const amount = convertAmount(expense.amount, expense.currency, displayCurrency);
 
     categoriesSet.add(categoryName);
 
@@ -204,6 +198,7 @@ export const getCategoryTrends = catchAsync(async (req, res, next) => {
   res.status(200).json({
     status: 'success',
     data: {
+      currency: displayCurrency,
       categories: categoriesList,
       trends: trendData,
     },
@@ -217,12 +212,13 @@ export const getCategoryTrends = catchAsync(async (req, res, next) => {
  */
 export const getCategoryComparison = catchAsync(async (req, res, next) => {
   const userId = req.user.id;
-  const { currentStartDate, currentEndDate, compareStartDate, compareEndDate } = req.query;
+  const homeCurrency = req.user.currency;
+  const { currentStartDate, currentEndDate, compareStartDate, compareEndDate, targetCurrency } = req.query;
+  const displayCurrency = targetCurrency || homeCurrency;
 
-  // 1. Fetch aggregations for both periods
-  const [currentPeriodData, comparePeriodData] = await Promise.all([
-    prisma.expense.groupBy({
-      by: ['categoryId'],
+  // 1. Fetch expenses for both periods
+  const [currentExpenses, compareExpenses] = await Promise.all([
+    prisma.expense.findMany({
       where: {
         paidById: userId,
         groupId: null,
@@ -231,12 +227,8 @@ export const getCategoryComparison = catchAsync(async (req, res, next) => {
           lte: new Date(currentEndDate),
         },
       },
-      _sum: {
-        amount: true,
-      },
     }),
-    prisma.expense.groupBy({
-      by: ['categoryId'],
+    prisma.expense.findMany({
       where: {
         paidById: userId,
         groupId: null,
@@ -244,9 +236,6 @@ export const getCategoryComparison = catchAsync(async (req, res, next) => {
           gte: new Date(compareStartDate),
           lte: new Date(compareEndDate),
         },
-      },
-      _sum: {
-        amount: true,
       },
     }),
   ]);
@@ -261,10 +250,21 @@ export const getCategoryComparison = catchAsync(async (req, res, next) => {
     },
   });
 
-  const currentMap = new Map(currentPeriodData.map((item) => [item.categoryId, Number(item._sum.amount || 0)]));
-  const compareMap = new Map(comparePeriodData.map((item) => [item.categoryId, Number(item._sum.amount || 0)]));
+  // 3. Aggregate converted amounts in memory maps
+  const currentMap = new Map();
+  const compareMap = new Map();
 
-  // 3. Calculate variance side-by-side
+  currentExpenses.forEach((exp) => {
+    const converted = convertAmount(exp.amount, exp.currency, displayCurrency);
+    currentMap.set(exp.categoryId, (currentMap.get(exp.categoryId) || 0) + converted);
+  });
+
+  compareExpenses.forEach((exp) => {
+    const converted = convertAmount(exp.amount, exp.currency, displayCurrency);
+    compareMap.set(exp.categoryId, (compareMap.get(exp.categoryId) || 0) + converted);
+  });
+
+  // 4. Calculate variance side-by-side
   const comparison = categories.map((cat) => {
     const currentAmount = currentMap.get(cat.id) || 0;
     const compareAmount = compareMap.get(cat.id) || 0;
@@ -281,8 +281,8 @@ export const getCategoryComparison = catchAsync(async (req, res, next) => {
       categoryId: cat.id,
       categoryName: cat.name,
       categoryIcon: cat.icon,
-      currentPeriodAmount: currentAmount,
-      comparePeriodAmount: compareAmount,
+      currentPeriodAmount: parseFloat(currentAmount.toFixed(2)),
+      comparePeriodAmount: parseFloat(compareAmount.toFixed(2)),
       difference: parseFloat(difference.toFixed(2)),
       percentageChange: parseFloat(percentageChange.toFixed(2)),
     };
@@ -293,6 +293,7 @@ export const getCategoryComparison = catchAsync(async (req, res, next) => {
   res.status(200).json({
     status: 'success',
     data: {
+      currency: displayCurrency,
       comparison,
     },
   });
@@ -305,7 +306,10 @@ export const getCategoryComparison = catchAsync(async (req, res, next) => {
  */
 export const getCategoryDrivers = catchAsync(async (req, res, next) => {
   const userId = req.user.id;
-  const { startDate, endDate, limit, categoryId } = req.query;
+  const homeCurrency = req.user.currency;
+  const { startDate, endDate, limit, categoryId, targetCurrency } = req.query;
+  const displayCurrency = targetCurrency || homeCurrency;
+  const limitNum = parseInt(limit, 10) || 5;
 
   // Build filter
   const where = {
@@ -323,12 +327,9 @@ export const getCategoryDrivers = catchAsync(async (req, res, next) => {
     if (endDate) where.date.lte = new Date(endDate);
   }
 
-  const topExpenses = await prisma.expense.findMany({
+  // Fetch matching expenses
+  const expenses = await prisma.expense.findMany({
     where,
-    orderBy: {
-      amount: 'desc',
-    },
-    take: limit,
     include: {
       category: {
         select: {
@@ -340,17 +341,26 @@ export const getCategoryDrivers = catchAsync(async (req, res, next) => {
     },
   });
 
-  const formattedDrivers = topExpenses.map((exp) => ({
-    id: exp.id,
-    description: exp.description,
-    amount: Number(exp.amount),
-    date: exp.date,
-    category: exp.category,
-  }));
+  // Convert amounts and sort in memory by converted amount to handle mixed currencies properly
+  const formattedDrivers = expenses.map((exp) => {
+    const converted = convertAmount(exp.amount, exp.currency, displayCurrency);
+    return {
+      id: exp.id,
+      description: exp.description,
+      amount: Number(exp.amount),
+      currency: exp.currency,
+      convertedAmount: converted,
+      date: exp.date,
+      category: exp.category,
+    };
+  })
+  .sort((a, b) => b.convertedAmount - a.convertedAmount)
+  .slice(0, limitNum);
 
   res.status(200).json({
     status: 'success',
     data: {
+      currency: displayCurrency,
       drivers: formattedDrivers,
     },
   });
