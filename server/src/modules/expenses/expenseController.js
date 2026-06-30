@@ -1,7 +1,7 @@
 import prisma from '../../config/db.js';
 import AppError from '../../utils/AppError.js';
 import catchAsync from '../../utils/catchAsync.js';
-import { processRecurringExpenses } from './recurringExpenseService.js';
+import { processRecurringExpenses, advanceDate } from './recurringExpenseService.js';
 
 /**
  * @desc    Record a new expense
@@ -559,16 +559,30 @@ export const updateRecurringExpense = catchAsync(async (req, res, next) => {
     categoryId,
   };
 
-  if (startDate) {
-    const newStart = new Date(startDate);
-    updateData.startDate = newStart;
-    updateData.nextDueDate = newStart;
-  }
-  
-  if (interval && interval !== recExpense.interval) {
-    updateData.interval = interval;
-    const baseDate = startDate ? new Date(startDate) : new Date(recExpense.startDate);
-    updateData.nextDueDate = baseDate;
+  // Resumption behavior: if template is reactivated (isActive changes from false to true)
+  // we advance nextDueDate to the next future occurrence/cycle to skip backfilling
+  if (isActive === true && recExpense.isActive === false) {
+    let currentNextDue = startDate ? new Date(startDate) : new Date(recExpense.nextDueDate);
+    const targetInterval = interval || recExpense.interval;
+    const now = new Date();
+
+    while (currentNextDue <= now) {
+      currentNextDue = advanceDate(currentNextDue, targetInterval);
+    }
+    updateData.nextDueDate = currentNextDue;
+  } else {
+    // Standard updates to dates if not reactivating
+    if (startDate) {
+      const newStart = new Date(startDate);
+      updateData.startDate = newStart;
+      updateData.nextDueDate = newStart;
+    }
+    
+    if (interval && interval !== recExpense.interval) {
+      updateData.interval = interval;
+      const baseDate = startDate ? new Date(startDate) : new Date(recExpense.startDate);
+      updateData.nextDueDate = baseDate;
+    }
   }
 
   const updatedRecurringExpense = await prisma.recurringExpense.update({
