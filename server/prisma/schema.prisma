@@ -10,22 +10,29 @@ generator client {
 }
 
 model User {
-  id                 String             @id @default(uuid())
-  email              String             @unique
-  password           String             // Hashed password
-  name               String
-  currency           Currency           @default(INR)
-  createdAt          DateTime           @default(now())
-  updatedAt          DateTime           @updatedAt
-  categories         Category[]
-  expensesPaid       Expense[]          @relation("PaidExpenses")
-  recurringExpenses  RecurringExpense[] @relation("PaidRecurringExpenses")
-  refreshTokens      RefreshToken[]
-  categoryBudgets    CategoryBudget[]
-  monthlyBudget      MonthlyBudget?
-  splits             ExpenseSplit[]
-  memberships        GroupMember[]
-  groupsCreated      Group[]            @relation("GroupCreator")
+  id                   String              @id @default(uuid())
+  email                String              @unique
+  password             String              // Hashed password
+  name                 String
+  currency             Currency            @default(INR)
+  createdAt            DateTime            @default(now())
+  updatedAt            DateTime            @updatedAt
+  categories           Category[]
+  expensesPaid         Expense[]           @relation("PaidExpenses")
+  recurringExpenses    RecurringExpense[]  @relation("PaidRecurringExpenses")
+  refreshTokens        RefreshToken[]
+  categoryBudgets      CategoryBudget[]
+  monthlyBudget        MonthlyBudget?
+  splits               ExpenseSplit[]
+  memberships          GroupMember[]
+  groupsOwned          Group[]             @relation("GroupOwner")
+  paidGroupExpenses    GroupExpense[]      @relation("PaidGroupExpenses")
+  createdGroupExpenses GroupExpense[]      @relation("CreatedGroupExpenses")
+  groupExpenseSplits   GroupExpenseSplit[]
+  sentSettlements      GroupSettlement[]   @relation("SentSettlements")
+  receivedSettlements  GroupSettlement[]   @relation("ReceivedSettlements")
+  groupActivityLogs    GroupActivityLog[]
+  groupNotifications   GroupNotification[]
 }
 
 model Category {
@@ -45,24 +52,34 @@ model Category {
 }
 
 model Group {
-  id          String        @id @default(uuid())
-  name        String
-  description String?
-  createdById String
-  creator     User          @relation("GroupCreator", fields: [createdById], references: [id])
-  members     GroupMember[]
-  expenses    Expense[]
-  createdAt   DateTime      @default(now())
-  updatedAt   DateTime      @updatedAt
+  id           String             @id @default(uuid())
+  name         String
+  description  String?
+  currency     Currency           @default(INR)
+  joinCode     String             @unique
+  ownerId      String
+  owner        User               @relation("GroupOwner", fields: [ownerId], references: [id])
+  status       GroupStatus        @default(ACTIVE)
+  members      GroupMember[]
+  invitations  GroupInvitation[]
+  groupExpenses GroupExpense[]
+  settlements  GroupSettlement[]
+  activityLogs GroupActivityLog[]
+  expenses     Expense[]          // Retained for database compatibility with individual Expense model
+  createdAt    DateTime           @default(now())
+  updatedAt    DateTime           @updatedAt
 }
 
 model GroupMember {
-  id       String   @id @default(uuid())
-  groupId  String
-  group    Group    @relation(fields: [groupId], references: [id], onDelete: Cascade)
-  userId   String
-  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  joinedAt DateTime @default(now())
+  id        String            @id @default(uuid())
+  groupId   String
+  group     Group             @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role      GroupRole         @default(MEMBER)
+  status    GroupMemberStatus @default(PENDING)
+  joinedAt  DateTime          @default(now())
+  updatedAt DateTime          @updatedAt
 
   @@unique([groupId, userId])
 }
@@ -163,4 +180,140 @@ enum Currency {
   USD
   EUR
   AUD
+}
+
+enum GroupStatus {
+  ACTIVE
+  ARCHIVED
+  DELETED
+}
+
+enum GroupRole {
+  OWNER
+  ADMIN
+  MEMBER
+}
+
+enum GroupMemberStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  LEFT
+  REMOVED
+}
+
+enum GroupInvitationStatus {
+  PENDING
+  ACCEPTED
+  EXPIRED
+  CANCELLED
+}
+
+enum GroupExpenseCategory {
+  Food
+  Fuel
+  Hotel
+  Shopping
+  Travel
+  Entertainment
+  Medical
+  Miscellaneous
+}
+
+enum GroupSplitType {
+  EQUAL
+  EXACT
+  SHARES
+  CUSTOM
+}
+
+enum SettlementStatus {
+  PENDING
+  COMPLETED
+  CANCELLED
+}
+
+model GroupInvitation {
+  id           String                @id @default(uuid())
+  token        String                @unique
+  groupId      String
+  group        Group                 @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  invitedEmail String?
+  expiryTime   DateTime
+  status       GroupInvitationStatus @default(PENDING)
+  createdAt    DateTime              @default(now())
+  updatedAt    DateTime              @updatedAt
+}
+
+model GroupExpense {
+  id                String               @id @default(uuid())
+  title             String
+  description       String?
+  amount            Decimal
+  currency          Currency             @default(INR)
+  category          GroupExpenseCategory
+  receiptPath       String?              // Image/PDF storage path
+  receiptUploadedBy String?
+  receiptUploadedAt DateTime?
+  expenseDate       DateTime             @default(now())
+  paidById          String
+  paidBy            User                 @relation("PaidGroupExpenses", fields: [paidById], references: [id])
+  createdById       String
+  createdBy         User                 @relation("CreatedGroupExpenses", fields: [createdById], references: [id])
+  groupId           String
+  group             Group                @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  splitType         GroupSplitType       @default(EQUAL)
+  splits            GroupExpenseSplit[]
+  createdAt         DateTime             @default(now())
+  updatedAt         DateTime             @updatedAt
+}
+
+model GroupExpenseSplit {
+  id             String       @id @default(uuid())
+  groupExpenseId String
+  groupExpense   GroupExpense @relation(fields: [groupExpenseId], references: [id], onDelete: Cascade)
+  userId         String
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  amountOwed     Decimal
+  share          Decimal?     // For share split validation
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  @@unique([groupExpenseId, userId])
+}
+
+model GroupSettlement {
+  id         String           @id @default(uuid())
+  groupId    String
+  group      Group            @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  payerId    String
+  payer      User             @relation("SentSettlements", fields: [payerId], references: [id])
+  receiverId String
+  receiver   User             @relation("ReceivedSettlements", fields: [receiverId], references: [id])
+  amount     Decimal
+  status     SettlementStatus @default(PENDING)
+  createdAt  DateTime         @default(now())
+  updatedAt  DateTime         @updatedAt
+}
+
+model GroupActivityLog {
+  id        String   @id @default(uuid())
+  groupId   String
+  group     Group    @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  action    String
+  metadata  Json?
+  timestamp DateTime @default(now())
+}
+
+model GroupNotification {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title     String
+  message   String
+  metadata  Json?
+  isRead    Boolean  @default(false)
+  createdAt DateTime @default(now())
 }

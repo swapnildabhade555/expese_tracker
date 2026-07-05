@@ -814,6 +814,642 @@ specs.paths = {
       },
     },
   },
+  '/api/groups': {
+    post: {
+      tags: ['Groups'],
+      summary: 'Create a new group',
+      requestBody: {
+        required: true,
+        content: {
+          'application/json': {
+            schema: {
+              type: 'object',
+              required: ['name'],
+              properties: {
+                name: { type: 'string', example: 'Summer Vacation' },
+                description: { type: 'string', example: 'Expenses for summer trip 2026' },
+                currency: { type: 'string', enum: ['INR', 'USD', 'EUR', 'AUD'], default: 'INR' },
+              },
+            },
+          },
+        },
+      },
+      responses: {
+        201: {
+          description: 'Group created successfully',
+        },
+      },
+    },
+    get: {
+      tags: ['Groups'],
+      summary: 'List active and archived user groups',
+      responses: {
+        200: {
+          description: 'List of groups',
+        },
+      },
+    },
+  },
+  '/api/groups/{id}': {
+    get: {
+      tags: ['Groups'],
+      summary: 'Get details of a group (approved members only)',
+      parameters: [
+        { name: 'id', in: 'path', required: true, schema: { type: 'string', format: 'uuid' } },
+      ],
+      responses: {
+        200: {
+          description: 'Group details card',
+        },
+      },
+    },
+    patch: {
+      tags: ['Groups'],
+      summary: 'Update group details (Owner/Admins only)',
+      parameters: [
+        { name: 'id', in: 'path', required: true, schema: { type: 'string', format: 'uuid' } },
+      ],
+      requestBody: {
+        content: {
+          'application/json': {
+            schema: {
+              type: 'object',
+              properties: {
+                name: { type: 'string' },
+                description: { type: 'string' },
+                currency: { type: 'string', enum: ['INR', 'USD', 'EUR', 'AUD'] },
+              },
+            },
+          },
+        },
+      },
+      responses: {
+        200: {
+          description: 'Group updated',
+        },
+      },
+    },
+    delete: {
+      tags: ['Groups'],
+      summary: 'Soft delete a group (Owner only)',
+      parameters: [
+        { name: 'id', in: 'path', required: true, schema: { type: 'string', format: 'uuid' } },
+      ],
+      responses: {
+        200: {
+          description: 'Group soft deleted successfully',
+        },
+      },
+    },
+  },
+  '/api/groups/{id}/archive': {
+    post: {
+      tags: ['Groups'],
+      summary: 'Archive a group (Owner/Admins only)',
+      parameters: [
+        { name: 'id', in: 'path', required: true, schema: { type: 'string', format: 'uuid' } },
+      ],
+      responses: {
+        200: {
+          description: 'Group archived successfully',
+        },
+      },
+    },
+  },
+  '/api/groups/{id}/unarchive': {
+    post: {
+      tags: ['Groups'],
+      summary: 'Unarchive a group (Owner/Admins only)',
+      parameters: [
+        { name: 'id', in: 'path', required: true, schema: { type: 'string', format: 'uuid' } },
+      ],
+      responses: {
+        200: {
+          description: 'Group unarchived successfully',
+        },
+      },
+    },
+  },
+  '/api/groups/join/code': {
+    post: {
+      tags: ['Group Membership & Invitations'],
+      summary: 'Join a group using unique join code',
+      requestBody: {
+        required: true,
+        content: {
+          'application/json': {
+            schema: {
+              type: 'object',
+              required: ['joinCode'],
+              properties: {
+                joinCode: { type: 'string', example: 'A1B2C3D4' },
+              },
+            },
+          },
+        },
+      },
+      responses: {
+        200: {
+          description: 'Join request pending',
+        },
+      },
+    },
+  },
+  '/api/groups/join/invite': {
+    post: {
+      tags: ['Group Membership & Invitations'],
+      summary: 'Join a group using invite token',
+      requestBody: {
+        required: true,
+        content: {
+          'application/json': {
+            schema: {
+              type: 'object',
+              required: ['token'],
+              properties: {
+                token: { type: 'string', example: 'invite_token_string' },
+              },
+            },
+          },
+        },
+      },
+      responses: {
+        200: {
+          description: 'Join request pending via invitation token',
+        },
+      },
+    },
+  },
+  '/api/groups/{id}/invitations/email': {
+    post: {
+      tags: ['Group Membership & Invitations'],
+      summary: 'Invite a member by email (Owner/Admins only)',
+      parameters: [
+        { name: 'id', in: 'path', required: true, schema: { type: 'string', format: 'uuid' } },
+      ],
+      requestBody: {
+        required: true,
+        content: {
+          'application/json': {
+            schema: {
+              type: 'object',
+              required: ['invitedEmail'],
+              properties: {
+                invitedEmail: { type: 'string', format: 'email', example: 'friend@example.com' },
+              },
+            },
+          },
+        },
+      },
+      responses: {
+        201: {
+          description: 'Invitation sent successfully',
+        },
+      },
+    },
+  },
+  '/api/groups/{id}/invitations/code': {
+    get: {
+      tags: ['Group Membership & Invitations'],
+      summary: 'Get/Fetch group join code (Owner/Admins only)',
+      parameters: [
+        { name: 'id', in: 'path', required: true, schema: { type: 'string', format: 'uuid' } },
+      ],
+      responses: {
+        200: {
+          description: 'Join code details',
+        },
+      },
+    },
+  },
+  '/api/groups/{id}/members/approve': {
+    patch: {
+      tags: ['Group Membership & Invitations'],
+      summary: 'Approve a pending group join request (Owner/Admins only)',
+      parameters: [
+        { name: 'id', in: 'path', required: true, schema: { type: 'string', format: 'uuid' } },
+      ],
+      requestBody: {
+        required: true,
+        content: {
+          'application/json': {
+            schema: {
+              type: 'object',
+              required: ['memberUserId'],
+              properties: {
+                memberUserId: { type: 'string', format: 'uuid' },
+              },
+            },
+          },
+        },
+      },
+      responses: {
+        200: {
+          description: 'Member approved successfully',
+        },
+      },
+    },
+  },
+  '/api/groups/{id}/members/reject': {
+    patch: {
+      tags: ['Group Membership & Invitations'],
+      summary: 'Reject a pending group join request (Owner/Admins only)',
+      parameters: [
+        { name: 'id', in: 'path', required: true, schema: { type: 'string', format: 'uuid' } },
+      ],
+      requestBody: {
+        required: true,
+        content: {
+          'application/json': {
+            schema: {
+              type: 'object',
+              required: ['memberUserId'],
+              properties: {
+                memberUserId: { type: 'string', format: 'uuid' },
+              },
+            },
+          },
+        },
+      },
+      responses: {
+        200: {
+          description: 'Member rejected successfully',
+        },
+      },
+    },
+  },
+  '/api/groups/{id}/members/role': {
+    patch: {
+      tags: ['Group Membership & Invitations'],
+      summary: 'Update member role - appoint/remove admin (Owner only)',
+      parameters: [
+        { name: 'id', in: 'path', required: true, schema: { type: 'string', format: 'uuid' } },
+      ],
+      requestBody: {
+        required: true,
+        content: {
+          'application/json': {
+            schema: {
+              type: 'object',
+              required: ['memberUserId', 'role'],
+              properties: {
+                memberUserId: { type: 'string', format: 'uuid' },
+                role: { type: 'string', enum: ['ADMIN', 'MEMBER'] },
+              },
+            },
+          },
+        },
+      },
+      responses: {
+        200: {
+          description: 'Role updated successfully',
+        },
+      },
+    },
+  },
+  '/api/groups/{id}/members/transfer-owner': {
+    post: {
+      tags: ['Group Membership & Invitations'],
+      summary: 'Transfer group ownership (Owner only)',
+      parameters: [
+        { name: 'id', in: 'path', required: true, schema: { type: 'string', format: 'uuid' } },
+      ],
+      requestBody: {
+        required: true,
+        content: {
+          'application/json': {
+            schema: {
+              type: 'object',
+              required: ['memberUserId'],
+              properties: {
+                memberUserId: { type: 'string', format: 'uuid' },
+              },
+            },
+          },
+        },
+      },
+      responses: {
+        200: {
+          description: 'Ownership transferred successfully',
+        },
+      },
+    },
+  },
+  '/api/groups/{id}/members/leave': {
+    post: {
+      tags: ['Group Membership & Invitations'],
+      summary: 'Leave a group (Self-leave)',
+      parameters: [
+        { name: 'id', in: 'path', required: true, schema: { type: 'string', format: 'uuid' } },
+      ],
+      responses: {
+        200: {
+          description: 'Member left group successfully',
+        },
+      },
+    },
+  },
+  '/api/groups/{id}/members/remove': {
+    delete: {
+      tags: ['Group Membership & Invitations'],
+      summary: 'Remove a member from the group (Owner/Admins only)',
+      parameters: [
+        { name: 'id', in: 'path', required: true, schema: { type: 'string', format: 'uuid' } },
+      ],
+      requestBody: {
+        required: true,
+        content: {
+          'application/json': {
+            schema: {
+              type: 'object',
+              required: ['memberUserId'],
+              properties: {
+                memberUserId: { type: 'string', format: 'uuid' },
+              },
+            },
+          },
+        },
+      },
+      responses: {
+        200: {
+          description: 'Member removed successfully',
+        },
+      },
+    },
+  },
+  '/api/groups/{id}/expenses': {
+    post: {
+      tags: ['Group Expenses'],
+      summary: 'Record a new group expense (Approved members only)',
+      parameters: [
+        { name: 'id', in: 'path', required: true, schema: { type: 'string', format: 'uuid' } },
+      ],
+      requestBody: {
+        required: true,
+        content: {
+          'application/json': {
+            schema: {
+              type: 'object',
+              required: ['title', 'amount', 'paidById', 'category', 'splitType'],
+              properties: {
+                title: { type: 'string', example: 'Group Dinner' },
+                description: { type: 'string', example: 'Saturday dinner' },
+                amount: { type: 'number', example: 1200 },
+                paidById: { type: 'string', format: 'uuid' },
+                category: { type: 'string', enum: ['Food', 'Fuel', 'Hotel', 'Shopping', 'Travel', 'Entertainment', 'Medical', 'Miscellaneous'] },
+                splitType: { type: 'string', enum: ['EQUAL', 'EXACT', 'SHARES', 'CUSTOM'] },
+                splits: {
+                  type: 'array',
+                  items: {
+                    type: 'object',
+                    properties: {
+                      userId: { type: 'string', format: 'uuid' },
+                      amountOwed: { type: 'number' },
+                      share: { type: 'number' },
+                    },
+                  },
+                },
+                receiptImage: { type: 'string', description: 'Base64 data URI of receipt image' },
+              },
+            },
+          },
+        },
+      },
+      responses: {
+        201: {
+          description: 'Expense recorded successfully',
+        },
+      },
+    },
+    get: {
+      tags: ['Group Expenses'],
+      summary: 'List group expenses (Approved members only)',
+      parameters: [
+        { name: 'id', in: 'path', required: true, schema: { type: 'string', format: 'uuid' } },
+        { name: 'category', in: 'query', schema: { type: 'string' } },
+        { name: 'search', in: 'query', schema: { type: 'string' } },
+      ],
+      responses: {
+        200: {
+          description: 'List of expenses',
+        },
+      },
+    },
+  },
+  '/api/groups/{id}/expenses/{expenseId}': {
+    patch: {
+      tags: ['Group Expenses'],
+      summary: 'Update group expense (Owner/Admins or Creator only)',
+      parameters: [
+        { name: 'id', in: 'path', required: true, schema: { type: 'string', format: 'uuid' } },
+        { name: 'expenseId', in: 'path', required: true, schema: { type: 'string', format: 'uuid' } },
+      ],
+      requestBody: {
+        content: {
+          'application/json': {
+            schema: {
+              type: 'object',
+              properties: {
+                title: { type: 'string' },
+                description: { type: 'string' },
+                amount: { type: 'number' },
+                paidById: { type: 'string', format: 'uuid' },
+                category: { type: 'string', enum: ['Food', 'Fuel', 'Hotel', 'Shopping', 'Travel', 'Entertainment', 'Medical', 'Miscellaneous'] },
+                splitType: { type: 'string', enum: ['EQUAL', 'EXACT', 'SHARES', 'CUSTOM'] },
+                splits: { type: 'array', items: { type: 'object' } },
+                receiptImage: { type: 'string' },
+              },
+            },
+          },
+        },
+      },
+      responses: {
+        200: {
+          description: 'Expense updated successfully',
+        },
+      },
+    },
+    delete: {
+      tags: ['Group Expenses'],
+      summary: 'Delete group expense (Owner/Admins or Creator only)',
+      parameters: [
+        { name: 'id', in: 'path', required: true, schema: { type: 'string', format: 'uuid' } },
+        { name: 'expenseId', in: 'path', required: true, schema: { type: 'string', format: 'uuid' } },
+      ],
+      responses: {
+        200: {
+          description: 'Expense deleted successfully',
+        },
+      },
+    },
+  },
+  '/api/groups/{id}/settlements/suggested': {
+    get: {
+      tags: ['Group Settlements'],
+      summary: 'Get optimized suggested settlements to balance group ledger',
+      parameters: [
+        { name: 'id', in: 'path', required: true, schema: { type: 'string', format: 'uuid' } },
+      ],
+      responses: {
+        200: {
+          description: 'Optimized suggested transactions',
+        },
+      },
+    },
+  },
+  '/api/groups/{id}/settlements': {
+    post: {
+      tags: ['Group Settlements'],
+      summary: 'Record a settlement payment between members (Approved members only)',
+      parameters: [
+        { name: 'id', in: 'path', required: true, schema: { type: 'string', format: 'uuid' } },
+      ],
+      requestBody: {
+        required: true,
+        content: {
+          'application/json': {
+            schema: {
+              type: 'object',
+              required: ['payerId', 'receiverId', 'amount'],
+              properties: {
+                payerId: { type: 'string', format: 'uuid' },
+                receiverId: { type: 'string', format: 'uuid' },
+                amount: { type: 'number', example: 200 },
+                status: { type: 'string', enum: ['PENDING', 'COMPLETED', 'CANCELLED'], default: 'PENDING' },
+              },
+            },
+          },
+        },
+      },
+      responses: {
+        201: {
+          description: 'Settlement recorded successfully',
+        },
+      },
+    },
+    get: {
+      tags: ['Group Settlements'],
+      summary: 'List settlements in a group (Approved members only)',
+      parameters: [
+        { name: 'id', in: 'path', required: true, schema: { type: 'string', format: 'uuid' } },
+      ],
+      responses: {
+        200: {
+          description: 'List of recorded settlements',
+        },
+      },
+    },
+  },
+  '/api/groups/{id}/settlements/{settlementId}': {
+    patch: {
+      tags: ['Group Settlements'],
+      summary: 'Update settlement status (Owner/Admins or involved members only)',
+      parameters: [
+        { name: 'id', in: 'path', required: true, schema: { type: 'string', format: 'uuid' } },
+        { name: 'settlementId', in: 'path', required: true, schema: { type: 'string', format: 'uuid' } },
+      ],
+      requestBody: {
+        required: true,
+        content: {
+          'application/json': {
+            schema: {
+              type: 'object',
+              required: ['status'],
+              properties: {
+                status: { type: 'string', enum: ['PENDING', 'COMPLETED', 'CANCELLED'] },
+              },
+            },
+          },
+        },
+      },
+      responses: {
+        200: {
+          description: 'Settlement status updated successfully',
+        },
+      },
+    },
+  },
+  '/api/groups/{id}/activity-logs': {
+    get: {
+      tags: ['Groups'],
+      summary: 'Get group activity history (Approved members only)',
+      parameters: [
+        { name: 'id', in: 'path', required: true, schema: { type: 'string', format: 'uuid' } },
+      ],
+      responses: {
+        200: {
+          description: 'List of activity logs',
+        },
+      },
+    },
+  },
+  '/api/groups/{id}/reports/summary': {
+    get: {
+      tags: ['Reports & Summaries'],
+      summary: 'Get overall group summary and member balance sheet',
+      parameters: [
+        { name: 'id', in: 'path', required: true, schema: { type: 'string', format: 'uuid' } },
+      ],
+      responses: {
+        200: {
+          description: 'Group summary report card',
+        },
+      },
+    },
+  },
+  '/api/groups/{id}/reports/category': {
+    get: {
+      tags: ['Reports & Summaries'],
+      summary: 'Get category-wise group spending summary',
+      parameters: [
+        { name: 'id', in: 'path', required: true, schema: { type: 'string', format: 'uuid' } },
+      ],
+      responses: {
+        200: {
+          description: 'Category spending report',
+        },
+      },
+    },
+  },
+  '/api/groups/{id}/reports/monthly': {
+    get: {
+      tags: ['Reports & Summaries'],
+      summary: 'Get monthly chronological group spending breakdown',
+      parameters: [
+        { name: 'id', in: 'path', required: true, schema: { type: 'string', format: 'uuid' } },
+      ],
+      responses: {
+        200: {
+          description: 'Monthly spending report',
+        },
+      },
+    },
+  },
+  '/api/notifications': {
+    get: {
+      tags: ['Notifications'],
+      summary: 'List user notifications history',
+      responses: {
+        200: {
+          description: 'Notifications list',
+        },
+      },
+    },
+  },
+  '/api/notifications/{id}/read': {
+    patch: {
+      tags: ['Notifications'],
+      summary: 'Mark a specific notification as read',
+      parameters: [
+        { name: 'id', in: 'path', required: true, schema: { type: 'string', format: 'uuid' } },
+      ],
+      responses: {
+        200: {
+          description: 'Notification marked read successfully',
+        },
+      },
+    },
+  },
 };
 
 export const serveSwagger = (app) => {

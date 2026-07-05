@@ -5,13 +5,9 @@ import { errorHandler } from './middlewares/errorHandler.js';
 import AppError from './utils/AppError.js';
 import { seedDefaultCategories } from './config/seed.js';
 
-import authRouter from './modules/auth/authRoutes.js';
-import categoryRouter from './modules/categories/categoryRoutes.js';
-import expenseRouter from './modules/expenses/expenseRoutes.js';
-import analyticsRouter from './modules/analytics/analyticsRoutes.js';
-import budgetRouter from './modules/budgets/budgetRoutes.js';
-import { processRecurringExpenses } from './modules/expenses/recurringExpenseService.js';
-import { loadExchangeRates } from './modules/expenses/currencyService.js';
+import apiRouter from './routes/index.js';
+import { processRecurringExpenses } from './modules/Individual/expenses/services/recurringExpenseService.js';
+import { loadExchangeRates } from './modules/Individual/expenses/services/currencyService.js';
 import { serveSwagger } from './config/swagger.js';
 
 dotenv.config();
@@ -28,11 +24,7 @@ app.use(cors());
 app.use(express.json());
 
 // Routes
-app.use('/api/auth', authRouter);
-app.use('/api/categories', categoryRouter);
-app.use('/api/expenses', expenseRouter);
-app.use('/api/analytics', analyticsRouter);
-app.use('/api/budgets', budgetRouter);
+app.use('/api', apiRouter);
 
 // Register Swagger docs
 serveSwagger(app);
