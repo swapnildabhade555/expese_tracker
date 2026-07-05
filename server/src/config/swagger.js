@@ -79,6 +79,29 @@ const options = {
             updatedAt: { type: 'string', format: 'date-time' },
           },
         },
+        CategoryBudget: {
+          type: 'object',
+          properties: {
+            id: { type: 'string', format: 'uuid' },
+            limit: { type: 'number' },
+            currency: { type: 'string', enum: ['INR', 'USD', 'EUR', 'AUD'], default: 'INR' },
+            userId: { type: 'string', format: 'uuid' },
+            categoryId: { type: 'string', format: 'uuid' },
+            createdAt: { type: 'string', format: 'date-time' },
+            updatedAt: { type: 'string', format: 'date-time' },
+          },
+        },
+        MonthlyBudget: {
+          type: 'object',
+          properties: {
+            id: { type: 'string', format: 'uuid' },
+            limit: { type: 'number' },
+            currency: { type: 'string', enum: ['INR', 'USD', 'EUR', 'AUD'], default: 'INR' },
+            userId: { type: 'string', format: 'uuid' },
+            createdAt: { type: 'string', format: 'date-time' },
+            updatedAt: { type: 'string', format: 'date-time' },
+          },
+        },
       },
     },
     security: [
@@ -700,6 +723,93 @@ specs.paths = {
       responses: {
         200: {
           description: 'Drivers list',
+        },
+      },
+    },
+  },
+  '/api/budgets': {
+    get: {
+      tags: ['Budgets'],
+      summary: 'Get active category and overall budgets with real-time spend progress',
+      responses: {
+        200: {
+          description: 'Budgets health report',
+        },
+      },
+    },
+  },
+  '/api/budgets/category': {
+    post: {
+      tags: ['Budgets'],
+      summary: 'Set or update a category budget limit',
+      description: "Pre-populates and locks budget currency to the user's home currency preference.",
+      requestBody: {
+        required: true,
+        content: {
+          'application/json': {
+            schema: {
+              type: 'object',
+              required: ['categoryId', 'limit'],
+              properties: {
+                categoryId: { type: 'string', format: 'uuid', example: '1602e446-ac15-481e-a3f4-5e66339a9cdc' },
+                limit: { type: 'number', example: 5000 },
+              },
+            },
+          },
+        },
+      },
+      responses: {
+        200: {
+          description: 'Category budget upserted successfully',
+        },
+      },
+    },
+  },
+  '/api/budgets/category/{categoryId}': {
+    delete: {
+      tags: ['Budgets'],
+      summary: 'Delete a category budget limit',
+      parameters: [
+        { name: 'categoryId', in: 'path', required: true, schema: { type: 'string', format: 'uuid' } },
+      ],
+      responses: {
+        204: {
+          description: 'Category budget deleted',
+        },
+      },
+    },
+  },
+  '/api/budgets/monthly': {
+    post: {
+      tags: ['Budgets'],
+      summary: 'Set or update the overall monthly spending budget limit',
+      description: "Pre-populates and locks budget currency to the user's home currency preference.",
+      requestBody: {
+        required: true,
+        content: {
+          'application/json': {
+            schema: {
+              type: 'object',
+              required: ['limit'],
+              properties: {
+                limit: { type: 'number', example: 30000 },
+              },
+            },
+          },
+        },
+      },
+      responses: {
+        200: {
+          description: 'Overall monthly budget upserted successfully',
+        },
+      },
+    },
+    delete: {
+      tags: ['Budgets'],
+      summary: 'Delete the overall monthly budget limit',
+      responses: {
+        204: {
+          description: 'Overall monthly budget deleted',
         },
       },
     },

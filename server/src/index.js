@@ -9,6 +9,7 @@ import authRouter from './modules/auth/authRoutes.js';
 import categoryRouter from './modules/categories/categoryRoutes.js';
 import expenseRouter from './modules/expenses/expenseRoutes.js';
 import analyticsRouter from './modules/analytics/analyticsRoutes.js';
+import budgetRouter from './modules/budgets/budgetRoutes.js';
 import { processRecurringExpenses } from './modules/expenses/recurringExpenseService.js';
 import { loadExchangeRates } from './modules/expenses/currencyService.js';
 import { serveSwagger } from './config/swagger.js';
@@ -31,6 +32,7 @@ app.use('/api/auth', authRouter);
 app.use('/api/categories', categoryRouter);
 app.use('/api/expenses', expenseRouter);
 app.use('/api/analytics', analyticsRouter);
+app.use('/api/budgets', budgetRouter);
 
 // Register Swagger docs
 serveSwagger(app);

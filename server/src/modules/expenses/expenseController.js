@@ -3,6 +3,7 @@ import AppError from '../../utils/AppError.js';
 import catchAsync from '../../utils/catchAsync.js';
 import { processRecurringExpenses, advanceDate } from './recurringExpenseService.js';
 import { convertAmount } from './currencyService.js';
+import { checkBudgets } from '../budgets/budgetService.js';
 
 /**
  * @desc    Record a new expense
@@ -50,11 +51,14 @@ export const createExpense = catchAsync(async (req, res, next) => {
     },
   });
 
+  const budgetAlert = await checkBudgets(userId, categoryId, amount, newExpense.currency, newExpense.date, newExpense.id);
+
   res.status(201).json({
     status: 'success',
     data: {
       expense: newExpense,
     },
+    ...(budgetAlert && { budgetAlert }),
   });
 });
 
@@ -266,11 +270,21 @@ export const updateExpense = catchAsync(async (req, res, next) => {
     },
   });
 
+  const budgetAlert = await checkBudgets(
+    userId,
+    updatedExpense.categoryId,
+    updatedExpense.amount,
+    updatedExpense.currency,
+    updatedExpense.date,
+    id // Exclude this expense's current amount to prevent double counting
+  );
+
   res.status(200).json({
     status: 'success',
     data: {
       expense: updatedExpense,
     },
+    ...(budgetAlert && { budgetAlert }),
   });
 });
 

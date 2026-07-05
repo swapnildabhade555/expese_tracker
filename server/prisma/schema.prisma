@@ -21,6 +21,8 @@ model User {
   expensesPaid       Expense[]          @relation("PaidExpenses")
   recurringExpenses  RecurringExpense[] @relation("PaidRecurringExpenses")
   refreshTokens      RefreshToken[]
+  categoryBudgets    CategoryBudget[]
+  monthlyBudget      MonthlyBudget?
   splits             ExpenseSplit[]
   memberships        GroupMember[]
   groupsCreated      Group[]            @relation("GroupCreator")
@@ -35,6 +37,7 @@ model Category {
   user              User?              @relation(fields: [userId], references: [id], onDelete: Cascade)
   expenses          Expense[]
   recurringExpenses RecurringExpense[]
+  budgets           CategoryBudget[]
   createdAt         DateTime           @default(now())
   updatedAt         DateTime           @updatedAt
 
@@ -129,6 +132,30 @@ model RefreshToken {
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   expiresAt DateTime
   createdAt DateTime @default(now())
+}
+
+model CategoryBudget {
+  id         String   @id @default(uuid())
+  limit      Decimal  // Monthly limit amount
+  currency   Currency @default(INR) // Budget currency (locked to home currency)
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  categoryId String
+  category   Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@unique([userId, categoryId]) // One budget per category per user
+}
+
+model MonthlyBudget {
+  id        String   @id @default(uuid())
+  limit     Decimal  // Monthly overall limit amount
+  currency  Currency @default(INR) // Budget currency (locked to home currency)
+  userId    String   @unique // One overall budget limit per user
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 enum Currency {
